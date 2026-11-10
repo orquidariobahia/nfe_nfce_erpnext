@@ -338,16 +338,29 @@ def imprimirNotaFiscal(*args, **kwargs):
             {"error": "Um pedido precisa existir antes de imprimir uma Nota fiscal."}
         )
 
+    nota_criada = False
     if server_doc.nf_ultima_nota is None:
-        frappe.throw(
-            title="Nota não encontrada",
-            msg="Uma Nota fiscal precisa existir antes de imprimir a mesma.",
-        )
-        return json.dumps(
-            {"error": "Uma Nota fiscal precisa existir antes de imprimir a mesma."}
-        )
+        nota = criarNotaFiscal(server_pos_invoice=server_doc, insert=True, submit=True, modelo=2)
+        nota_criada = True
+        if nota.get("error") is not None or nota is None:
+            frappe.throw(
+                title="Nota não encontrada",
+                msg="Uma Nota fiscal precisa existir antes de imprimir a mesma.",
+            )
+            return json.dumps(
+                {"error": "Uma Nota fiscal precisa existir antes de imprimir a mesma."}
+            )
 
     nota = frappe.get_doc("Nota Fiscal", server_doc.nf_ultima_nota)
+
+    if parseOption(nota.forma_pagamento) == 90 or parseOption(nota.forma_pagamento) == "90":
+        # TODO Criar Sales Invoice
+        t = criarSalesInvoice(server_pos_invoice=server_doc)
+        server_doc.cancel()
+        frappe.db.commit()
+        return
+    elif nota_criada:
+        emitida = emitirNotaFiscal(nota=nota)
 
     if nota.status == "processamento":
         frappe.throw(
@@ -919,17 +932,20 @@ def updatePosInvoice(doc, method=None):
     return
 
 def submitPosInvoice(doc, method=None):
-    print(doc)
-    nota = criarNotaFiscal(server_pos_invoice=doc, insert=True, submit=True, modelo=2)
-    if parseOption(nota.forma_pagamento) == 90 or parseOption(nota.forma_pagamento) == "90":
-        # TODO Criar Sales Invoice
-        t = criarSalesInvoice(server_pos_invoice=doc)
-        print(t)
-        doc.cancel()
-        frappe.db.commit()
-    else:
-        emitida = emitirNotaFiscal(nota=nota)
-    return
+    try:
+        nota = criarNotaFiscal(server_pos_invoice=doc, insert=True, submit=True, modelo=2)
+        if parseOption(nota.forma_pagamento) == 90 or parseOption(nota.forma_pagamento) == "90":
+            # TODO Criar Sales Invoice
+            t = criarSalesInvoice(server_pos_invoice=doc)
+            doc.cancel()
+            frappe.db.commit()
+        else:
+            emitida = emitirNotaFiscal(nota=nota)
+        return
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Erro ao emitir Nota Fiscal na submissão do POS Invoice")
+        frappe.log_error(e)
+        return
 
 def beforeInsertLoyaltyPointEntry(doc, method=None):
     if doc is not None:
