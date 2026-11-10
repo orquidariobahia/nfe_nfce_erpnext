@@ -1,0 +1,76 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-29 14:45:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "certificate_file",
+  "certificate_password",
+  "company_cnpj",
+  "environment",
+  "last_nsu"
+ ],
+ "fields": [
+  {
+   "fieldname": "certificate_file",
+   "fieldtype": "Attach",
+   "label": "Certificado Digital A1 (.pfx)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "certificate_password",
+   "fieldtype": "Password",
+   "label": "Senha do Certificado",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company_cnpj",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "CNPJ da Empresa",
+   "reqd": 1
+  },
+  {
+   "default": "(2) - Homologa\u00e7\u00e3o",
+   "fieldname": "environment",
+   "fieldtype": "Select",
+   "label": "Ambiente SEFAZ",
+   "options": "(1) - Produ\u00e7\u00e3o\n(2) - Homologa\u00e7\u00e3o",
+   "reqd": 1
+  },
+  {
+   "default": "000000000000000",
+   "fieldname": "last_nsu",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "\u00daltimo NSU Consultado",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-29 14:45:00.000000",
+ "modified_by": "Administrator",
+ "module": "NFe NFCe for ERPNext",
+ "name": "SEFAZ Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

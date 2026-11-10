@@ -11,7 +11,7 @@ app_license = "mpl-2.0"
 
 # include js, css files in header of desk.html
 app_include_css = ["/assets/nfe_nfce_erpnext/css/pos.css"]
-# app_include_js = ["/assets/nfe_nfce_erpnext/js/nfe_nfce_erpnext.js"]
+app_include_js = ["/assets/nfe_nfce_erpnext/js/whatsapp_share.js"]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/nfe_nfce_erpnext/css/nfe_nfce_erpnext.css"
@@ -34,6 +34,7 @@ doctype_js = {
     "Customer" : "public/js/doctype/customer.js",
     "Supplier" : "public/js/doctype/customer.js",
     "Item": "public/js/doctype/item.js",
+    "Purchase Invoice": "public/js/doctype/purchase_invoice.js",
 }
 fixtures = [
     {
@@ -45,7 +46,10 @@ fixtures = [
         "filters": [["module", "in", ("NFe NFCe for ERPNext")]],
     },
 ]
-doctype_list_js = {"Item" : "public/js/list_view/item_list.js"}
+doctype_list_js = {
+    "Item" : "public/js/list_view/item_list.js",
+    "Purchase Invoice": "public/js/list_view/purchase_invoice_list.js"
+}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
@@ -83,8 +87,8 @@ doctype_list_js = {"Item" : "public/js/list_view/item_list.js"}
 # Installation
 # ------------
 
-# before_install = "nfe_nfce_erpnext.install.before_install"
-# after_install = "nfe_nfce_erpnext.install.after_install"
+after_install = "nfe_nfce_erpnext.setup.setup_default_fixtures"
+after_migrate = "nfe_nfce_erpnext.setup.setup_default_fixtures"
 
 # Uninstallation
 # ------------
@@ -143,6 +147,9 @@ doc_events = {
         #"on_change": "nfe_nfce_erpnext.api.updatePosInvoice",
         "on_submit": "nfe_nfce_erpnext.api.submitPosInvoice",
     },
+    "Payment Entry": {
+        "validate": "nfe_nfce_erpnext.logic.auto_merger.try_auto_link_invoice",
+    },
     "Loyalty Point Entry": {
         "before_insert": "nfe_nfce_erpnext.api.beforeInsertLoyaltyPointEntry",
     },
@@ -155,23 +162,16 @@ doc_events = {
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"nfe_nfce_erpnext.tasks.all"
-# 	],
-# 	"daily": [
-# 		"nfe_nfce_erpnext.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"nfe_nfce_erpnext.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"nfe_nfce_erpnext.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"nfe_nfce_erpnext.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+    "cron": {
+        "0 */4 * * *": [
+            "nfe_nfce_erpnext.pluggy_sync.enqueue_pluggy_sync"
+        ],
+        "1 */4 * * *": [
+            "nfe_nfce_erpnext.sefaz_sync.enqueue_sefaz_sync"
+        ]
+    }
+}
 
 # Testing
 # -------

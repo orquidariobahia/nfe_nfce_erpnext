@@ -1,0 +1,1 @@
+# SEFAZ Settings DocType

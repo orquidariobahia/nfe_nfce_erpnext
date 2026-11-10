@@ -18,6 +18,8 @@ from erpnext.stock.doctype.item.item import get_item_defaults
 from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
 from erpnext.accounts.party import get_party_account
 from frappe.utils.file_manager import save_url
+from nfe_nfce_erpnext.providers import get_fiscal_provider
+from nfe_nfce_erpnext.nfce_scanner import parse_qr, parse_sefaz_html
 
 tempStates = {
     "Acre": "AC",
@@ -76,24 +78,6 @@ def parseOption(option):
     if option is not None and option.startswith("("):
         return option[option.find("(") + 1 : option.find(")")]
     return option
-
-# TODO Quando eu alterei no ambiente de produção o ambiente, não refletiu
-def webmaniaSettings():
-    settings = frappe.get_doc("Nota Fiscal Settings")
-    obj = {
-        "headers": {
-            "cache-control": "no-cache",
-            "content-type": "application/json",
-            "x-consumer-key": settings.get_password("webmania_consumer_key"),
-            "x-consumer-secret": settings.get_password("webmania_consumer_secret"),
-            "x-access-token": settings.get_password("webmania_access_token"),
-            "x-access-token-secret": settings.get_password(
-                "webmania_access_token_secret"
-            ),
-        },
-        "ambiente": parseOption(settings.webmania_ambiente),
-    }
-    return obj
 
 def remove_nulls(value):
     if isinstance(value, dict):
@@ -159,7 +143,7 @@ def emitirNotaFiscal(*args, **kwargs):
             }
         )
 
-    settings = webmaniaSettings()
+    settings = get_fiscal_provider().get_settings()
 
     result = {}
     result["operacao"] = int(parseOption(nota_db.operacao))
@@ -265,24 +249,8 @@ def emitirNotaFiscal(*args, **kwargs):
     #    transporte["telefone"] = int(nota_db.entrega_telefone)
     # transporte["email"] = nota_db.entrega_email
 
-    headers = settings["headers"]
-
-    url = "https://webmaniabr.com/api/1/nfe/emissao/"
-
-    dumps = json.dumps(remove_nulls(result))
-
-    response = requests.request("POST", url, data=dumps, headers=headers)
-
-    if response.status_code != 200:
-        # Uknown error
-        frappe.throw(title="Erro ao emitir nota fiscal", msg=response.text)
-        return response.text
-
-    if "json" not in response.headers["content-type"]:
-        frappe.throw(title="Erro ao emitir nota fiscal", msg=response.text)
-        return response.text
-
-    returned_json = response.json()
+    provider = get_fiscal_provider()
+    returned_json = provider.emit_nota_fiscal(result)
 
     if returned_json.get("error") is not None:
         frappe.throw(title="Erro ao emitir nota fiscal", msg=response.text)
@@ -366,9 +334,17 @@ def imprimirNotaFiscal(*args, **kwargs):
         frappe.throw(title="Nota não aprovada", msg="A Nota fiscal não foi aprovada.")
         return json.dumps({"error": "A Nota fiscal não foi aprovada."})
 
-    html = requests.request("GET", "https://nfe.webmaniabr.com/danfe/" + nota.chave)
+    provider = get_fiscal_provider()
+    danfe_url = provider.get_danfe_url(nota.chave, "danfe")
+    html = requests.request("GET", danfe_url)
 
     return json.dumps({"html": html.text})
+
+
+@frappe.whitelist()
+def get_danfe_url(chave, format_type="danfe"):
+    provider = get_fiscal_provider()
+    return provider.get_danfe_url(chave, format_type)
 
 
 @frappe.whitelist()
@@ -654,11 +630,11 @@ def criarNotaFiscal(*args, **kwargs):
     nota.link = server_doc.doctype
 
     if parseOption(nota.ambiente) == "0":
+        provider = get_fiscal_provider()
+        ambiente_val = provider.get_settings().get("ambiente", 2)
         nota.ambiente = selectOption(
-            webmaniaSettings()["ambiente"],
-            frappe.get_meta("Nota Fiscal Settings")
-            .get_field("webmania_ambiente")
-            .options.split("\n"),
+            str(ambiente_val),
+            ["(1) - Produção", "(2) - Homologação"],
         )
 
     if insert and server_doc is not None and nota.forma_pagamento != sem_pagamento:
@@ -829,31 +805,28 @@ def pullDataCNPJ(*args, **kwargs):
 
         customer.nf_razao_social = razao_social
 
-        results = get_linked_docs(
-            doctype, customer.name, linkinfo=get_linked_doctypes(doctype)
-        )
+        # Get linked addresses cleanly without get_linked_doctypes (bypasses missing HR module)
+        address_links = frappe.get_all("Dynamic Link", filters={"link_doctype": doctype, "link_name": customer.name, "parenttype": "Address"}, fields=["parent"])
 
-        addresses = results.get("Address")
-
-        if addresses is None or len(addresses) == 0:
+        if not address_links:
             address = frappe.new_doc("Address")
-            address.address_title = customer.name + "-Cadastro"
-            address.address_line1 = tipo_logradouro + " " + logradouro
-            address.number = numero
-            address.address_line2 = complemento
-            address.neighborhood = bairro
-            address.city = cidade
-            address.state = estado
-            address.pincode = cep
-            address.email_id = email
-            address.phone = telefone
-            link = frappe.new_doc("Dynamic Link")
-            link.link_doctype = doctype
-            link.link_name = customer.name
-            address.links.append(link)
-            address.insert()
+            address.address_title = f"{customer.name}-Cadastro"
+            address.address_line1 = f"{tipo_logradouro} {logradouro}" if tipo_logradouro else (logradouro or "")
+            address.number = numero or ""
+            address.address_line2 = complemento or ""
+            address.neighborhood = bairro or ""
+            address.city = cidade or ""
+            address.state = estado or ""
+            address.pincode = cep or ""
+            address.email_id = email or ""
+            address.phone = telefone or ""
+            address.append("links", {
+                "link_doctype": doctype,
+                "link_name": customer.name
+            })
+            address.insert(ignore_permissions=True)
 
-        customer.save()
+        customer.save(ignore_permissions=True)
         frappe.db.commit()
         customer.notify_update()
 
@@ -965,3 +938,100 @@ def afterSaveItemPrice(doc, method=None):
                 rule.title = doc.item_name
                 rule.insert()
     return
+
+
+@frappe.whitelist(allow_guest=True)
+def parse_qr(qr_url: str = None, **kwargs):
+    if not qr_url or qr_url == "qr_url":
+        qr_url = frappe.form_dict.get("qr_url") or kwargs.get("qr_url")
+    from nfe_nfce_erpnext.nfce_scanner import parse_qr as _parse_qr
+    return _parse_qr(qr_url=qr_url, **kwargs)
+
+
+@frappe.whitelist(allow_guest=True)
+def parse_sefaz_html(invoice_name: str = None, html_content: str = None, **kwargs):
+    try:
+        if not invoice_name:
+            invoice_name = frappe.form_dict.get("invoice_name") or kwargs.get("invoice_name")
+        if not html_content:
+            html_content = frappe.form_dict.get("html_content") or kwargs.get("html_content")
+
+        from nfe_nfce_erpnext.nfce_scanner import parse_sefaz_html as _parse_sefaz_html
+        return _parse_sefaz_html(invoice_name=invoice_name, html_content=html_content)
+    except Exception as e:
+        frappe.log_error(f"parse_sefaz_html Exception: {str(e)}", "NFC-e Wrapper Exception")
+        return {"status": "error", "error": str(e)}
+
+
+@frappe.whitelist()
+def create_permanent_supplier(invoice_name: str, supplier_name: str = None):
+    if not frappe.has_permission("Supplier", "create"):
+        frappe.throw("Permissão negada para criar Fornecedor.", frappe.PermissionError)
+
+    pi = frappe.get_doc("Purchase Invoice", invoice_name)
+    remarks = pi.remarks or ""
+
+    cnpj_match = re.search(r"(\d{14})", remarks)
+    tax_id = cnpj_match.group(1) if cnpj_match else ""
+
+    from nfe_nfce_erpnext.sefaz_sync import get_or_create_supplier
+    permanent_name = supplier_name or (f"Fornecedor CNPJ {tax_id}" if tax_id else "Novo Fornecedor NFC-e")
+
+    supplier_docname = get_or_create_supplier(tax_id, permanent_name, auto_create=True)
+
+    pi.supplier = supplier_docname
+    pi.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"status": "success", "supplier": supplier_docname, "message": f"Fatura vinculada ao Fornecedor '{supplier_docname}'!"}
+
+
+@frappe.whitelist()
+def bulk_submit_invoices(docnames):
+    if isinstance(docnames, str):
+        import json
+        docnames = json.loads(docnames)
+
+    if not frappe.has_permission("Purchase Invoice", "submit"):
+        frappe.throw("Permissão negada para submeter Faturas de Compra.", frappe.PermissionError)
+
+    submitted_invoices = 0
+    submitted_payments = 0
+
+    for name in docnames:
+        pi = frappe.get_doc("Purchase Invoice", name)
+        if pi.docstatus == 0:
+            pi.submit()
+            submitted_invoices += 1
+
+            # Specifically for this bulk review button: auto-submit linked Draft Payment Entries
+            linked_pe_names = frappe.get_all(
+                "Payment Entry Reference",
+                filters={"reference_doctype": "Purchase Invoice", "reference_name": name, "docstatus": 0},
+                fields=["parent"]
+            )
+
+            for pe_ref in linked_pe_names:
+                pe_name = pe_ref.parent
+                if frappe.db.get_value("Payment Entry", pe_name, "docstatus") == 0:
+                    pe_doc = frappe.get_doc("Payment Entry", pe_name)
+                    pe_doc.submit()
+                    submitted_payments += 1
+
+    frappe.db.commit()
+
+    msg = f"{submitted_invoices} faturas aprovadas com sucesso!"
+    if submitted_payments > 0:
+        msg += f" ({submitted_payments} pagamentos vinculados também submetidos)"
+
+    return {"status": "success", "message": msg}
+
+
+@frappe.whitelist()
+def get_document_share_key(doctype, name):
+    """Generate or retrieve a Document Share Key for public PDF access without login."""
+    doc = frappe.get_doc(doctype, name)
+    doc.check_permission("read")
+    key = doc.get_document_share_key(no_expiry=True)
+    frappe.db.commit()
+    return key

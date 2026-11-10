@@ -1,3 +1,10 @@
 requests
 unidecode
 phonenumbers
+beautifulsoup4
+PyTrustNFe
+suds-py3
+suds_requests
+brazilfiscalreport
+pyOpenSSL
+signxml

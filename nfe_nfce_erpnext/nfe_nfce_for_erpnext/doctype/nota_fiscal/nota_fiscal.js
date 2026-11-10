@@ -33,19 +33,22 @@ frappe.ui.form.on("Nota Fiscal", {
                         });
                 });
             } else {
-                if (frm.doc.status.toLowerCase() === "aprovado") {
-                    frm.page.add_action_item(__('Abrir Danfe'), function () {
-                        window.open('https://nfe.webmaniabr.com/danfe/' + frm.doc.chave, '_blank');
-                    });
-                    frm.page.add_action_item(__('Abrir Danfe Simples'), function () {
-                        window.open('https://nfe.webmaniabr.com/danfe/simples/' + frm.doc.chave, '_blank');
-                    });
-                    frm.page.add_action_item(__('Abrir Danfe Etiqueta'), function () {
-                        window.open('https://nfe.webmaniabr.com/danfe/etiqueta/' + frm.doc.chave, '_blank');
-                    });
-                    frm.page.add_action_item(__('Abrir XML'), function () {
-                        window.open('https://nfe.webmaniabr.com/xmlnfe/' + frm.doc.chave, '_blank');
-                    });
+                if (frm.doc.status && frm.doc.status.toLowerCase() === "aprovado") {
+                    const open_doc = function (format_type) {
+                        frappe.call({
+                            method: "nfe_nfce_erpnext.api.get_danfe_url",
+                            args: { chave: frm.doc.chave, format_type: format_type },
+                            callback: function (r) {
+                                if (r.message) {
+                                    window.open(r.message, '_blank');
+                                }
+                            }
+                        });
+                    };
+                    frm.page.add_action_item(__('Abrir Danfe'), function () { open_doc('danfe'); });
+                    frm.page.add_action_item(__('Abrir Danfe Simples'), function () { open_doc('simples'); });
+                    frm.page.add_action_item(__('Abrir Danfe Etiqueta'), function () { open_doc('etiqueta'); });
+                    frm.page.add_action_item(__('Abrir XML'), function () { open_doc('xml'); });
                 }
             }
         }

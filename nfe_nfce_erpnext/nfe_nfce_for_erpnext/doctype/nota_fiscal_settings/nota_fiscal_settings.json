@@ -5,26 +5,48 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "provider_section",
+  "fiscal_provider",
   "webmania_section",
   "webmania_ambiente",
   "webmania_consumer_key",
   "webmania_consumer_secret",
   "webmania_access_token",
-  "webmania_access_token_secret"
+  "webmania_access_token_secret",
+  "pluggy_section",
+  "pluggy_client_id",
+  "pluggy_client_secret",
+  "pluggy_start_date",
+  "pluggy_posting_date_strategy",
+  "pluggy_item_id",
+  "pluggy_webhook_url"
  ],
  "fields": [
+  {
+   "fieldname": "provider_section",
+   "fieldtype": "Section Break",
+   "label": "Provedor Fiscal"
+  },
+  {
+   "default": "WebManiaBR",
+   "fieldname": "fiscal_provider",
+   "fieldtype": "Select",
+   "label": "Provedor de Emissão Fiscal",
+   "options": "WebManiaBR",
+   "reqd": 1
+  },
   {
    "fieldname": "webmania_section",
    "fieldtype": "Section Break",
    "label": "WebMania"
   },
   {
-   "default": "(2) - Homologa\u00e7\u00e3o",
+   "default": "(2) - Homologação",
    "fieldname": "webmania_ambiente",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Ambiente",
-   "options": "(1) - Produ\u00e7\u00e3o\n(2) - Homologa\u00e7\u00e3o",
+   "options": "(1) - Produção\n(2) - Homologação",
    "reqd": 1
   },
   {
@@ -46,12 +68,53 @@
    "fieldname": "webmania_access_token_secret",
    "fieldtype": "Password",
    "label": "Access Token Secret"
+  },
+  {
+   "fieldname": "pluggy_section",
+   "fieldtype": "Section Break",
+   "label": "Pluggy (Integração Bancária)"
+  },
+  {
+   "fieldname": "pluggy_client_id",
+   "fieldtype": "Password",
+   "label": "Pluggy Client ID"
+  },
+  {
+   "fieldname": "pluggy_client_secret",
+   "fieldtype": "Password",
+   "label": "Pluggy Client Secret"
+  },
+  {
+   "description": "Apenas transações criadas nesta data ou após ela serão importadas para o ERPNext",
+   "fieldname": "pluggy_start_date",
+   "fieldtype": "Date",
+   "label": "Data Inicial de Ingestão Bancária"
+  },
+  {
+   "default": "(1) Usar Data Real da Transação Bancária",
+   "fieldname": "pluggy_posting_date_strategy",
+   "fieldtype": "Select",
+   "label": "Estratégia de Data de Lançamento Contábil",
+   "options": "(1) Usar Data Real da Transação Bancária\n(2) Usar Data Atual de Ingestão"
+  },
+  {
+   "hidden": 1,
+   "fieldname": "pluggy_item_id",
+   "fieldtype": "Data",
+   "label": "Pluggy Item ID (Internal)"
+  },
+  {
+   "description": "Copie e cole esta URL no Pluggy Dashboard (Eventos: item/created, item/updated, transactions/created)",
+   "fieldname": "pluggy_webhook_url",
+   "fieldtype": "Data",
+   "label": "URL para Webhook no Pluggy Dashboard",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2024-08-05 15:59:11.223141",
+ "modified": "2026-08-12 14:46:00.000000",
  "modified_by": "Administrator",
  "module": "NFe NFCe for ERPNext",
  "name": "Nota Fiscal Settings",

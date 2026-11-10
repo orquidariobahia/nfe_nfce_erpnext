@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leitor de Cupom Fiscal NFC-e</title>
+    <script>window.csrf_token = "{{ csrf_token }}";</script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            margin: 0;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .card {
+            background: #1e293b;
+            border-radius: 16px;
+            padding: 20px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            box-sizing: border-box;
+        }
+        h2 { margin-top: 0; color: #38bdf8; font-size: 1.4rem; }
+        p { color: #94a3b8; font-size: 0.9rem; margin-bottom: 16px; }
+        #reader {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid #334155;
+            background: #000;
+        }
+        #status {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            word-break: break-all;
+            display: none;
+        }
+        .status-loading { background: #0284c7; color: #fff; }
+        .status-success { background: #16a34a; color: #fff; }
+        .status-warning { background: #d97706; color: #fff; text-align: left; }
+        .status-error { background: #dc2626; color: #fff; text-align: left; }
+
+        .manual-section {
+            margin-top: 20px;
+            border-top: 1px solid #334155;
+            padding-top: 16px;
+            text-align: left;
+        }
+        .manual-section label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            display: block;
+            margin-bottom: 8px;
+        }
+        .input-group { display: flex; gap: 8px; }
+        input[type="text"], textarea {
+            flex: 1;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: #fff;
+            font-size: 0.85rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        button:hover { background: #0369a1; }
+        .btn-success { background: #16a34a; }
+        .btn-outline { background: transparent; border: 1px solid #64748b; }
+
+        .chave-box {
+            background: #0f172a;
+            padding: 8px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin: 8px 0;
+            user-select: all;
+            word-break: break-all;
+        }
+        .action-row { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+
+        .enrich-card {
+            margin-top: 16px;
+            background: #1e1b4b;
+            border: 1px solid #4338ca;
+            border-radius: 12px;
+            padding: 14px;
+            text-align: left;
+        }
+
+        /* Mobile Debug Console Box */
+        .debug-card {
+            margin-top: 20px;
+            background: #090d16;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 14px;
+            max-width: 480px;
+            width: 100%;
+            box-sizing: border-box;
+            text-align: left;
+        }
+        .debug-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .debug-title {
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #f59e0b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        #debug-log {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: #34d399;
+            background: #000;
+            padding: 10px;
+            border-radius: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>📷 Leitor de NFC-e</h2>
+        <p>Aponte a câmera para o QR Code do cupom fiscal de papel ou cole a URL abaixo.</p>
+        
+        <div id="reader"></div>
+        <div id="status"></div>
+
+        <div class="manual-section">
+            <label for="manual-url">Ou cole a URL do QR Code da SEFAZ:</label>
+            <div class="input-group">
+                <input type="text" id="manual-url" placeholder="http://sefaz.ba.gov.br/nfce/qrcode?chNFe=...">
+                <button onclick="submitManualUrl()">Processar</button>
+            </div>
+        </div>
+
+        <!-- Permanent Auto-Extrair Itens Section -->
+        <div class="enrich-card">
+            <label style="font-size: 0.85rem; font-weight: bold; color: #818cf8; display: block; margin-bottom: 6px;">
+                Auto-Extrair Itens do Texto da SEFAZ
+            </label>
+            <input type="text" id="target-invoice-name" placeholder="ID da Fatura (ex: ACC-PINV-2026-00039)" style="margin-bottom: 8px;">
+            <textarea id="sefaz-text-input" rows="3" placeholder="Cole aqui todo o texto/HTML copiado do site da SEFAZ..."></textarea>
+            <button onclick="submitSefazTextFromMain()" style="margin-top: 8px; width: 100%; background: #4f46e5;">
+                Auto-Extrair Itens para a Fatura
+            </button>
+        </div>
+    </div>
+
+    <!-- On-Screen Mobile Debug Console -->
+    <div class="debug-card">
+        <div class="debug-header">
+            <span class="debug-title">🐞 Console de Depuração (Mobile)</span>
+            <div>
+                <button onclick="clearDebugLog()" style="padding: 4px 8px; font-size: 0.75rem; background: #475569;">Limpar</button>
+                <button onclick="copyDebugLog()" style="padding: 4px 8px; font-size: 0.75rem; background: #d97706;">Copiar Logs</button>
+            </div>
+        </div>
+        <div id="debug-log">Iniciando leitor NFC-e...</div>
+    </div>
+
+    <script>
+        let isProcessing = false;
+        let lastCreatedInvoice = "";
+
+        function logDebug(msg) {
+            const time = new Date().toLocaleTimeString();
+            const logEl = document.getElementById('debug-log');
+            logEl.innerText += `\n[${time}] ${msg}`;
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(`[DEBUG] ${msg}`);
+        }
+
+        function clearDebugLog() {
+            document.getElementById('debug-log').innerText = "Console limpo.";
+        }
+
+        function copyDebugLog() {
+            const text = document.getElementById('debug-log').innerText;
+            navigator.clipboard.writeText(text);
+            logDebug("Logs copiados.");
+        }
+
+        window.addEventListener('load', () => {
+            logDebug("Página carregada.");
+            logDebug("URL Atual: " + window.location.href);
+            logDebug("window.csrf_token: " + (window.csrf_token ? window.csrf_token.substring(0, 10) + "..." : "Ausente"));
+            logDebug("window.frappe: " + (window.frappe ? "Presente" : "Ausente"));
+            logDebug("Cookies: " + (document.cookie ? document.cookie.substring(0, 50) + "..." : "Nenhum cookie"));
+        });
+
+        function showStatusHtml(htmlContent, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.innerHTML = htmlContent;
+            statusEl.className = 'status-' + type;
+            statusEl.style.display = 'block';
+        }
+
+        function showStatusText(text, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.innerText = text;
+            statusEl.className = 'status-' + type;
+            statusEl.style.display = 'block';
+        }
+
+        function copyChaveAndOpen(chave, url) {
+            logDebug("Copiando Chave e abrindo SEFAZ...");
+            navigator.clipboard.writeText(chave).catch(e => {});
+            window.open(url, '_blank');
+        }
+
+        function submitSefazTextFromMain() {
+            const invName = document.getElementById('target-invoice-name').value || lastCreatedInvoice;
+            const text = document.getElementById('sefaz-text-input').value;
+
+            if (!invName) return alert("Digite o ID da Fatura Rascunho (ex: ACC-PINV-2026-00039).");
+            if (!text) return alert("Cole o texto copiado da página da SEFAZ primeiro.");
+
+            logDebug("Enviando texto da SEFAZ para atualizar " + invName);
+            showStatusText("⏳ Extraindo itens do texto da SEFAZ...", "loading");
+
+            const formData = new FormData();
+            formData.append('invoice_name', invName);
+            formData.append('html_content', text);
+            formData.append('csrf_token', window.csrf_token || (window.frappe && frappe.csrf_token) || '');
+
+            fetch('/api/method/nfe_nfce_erpnext.api.parse_sefaz_html', {
+                method: 'POST',
+                headers: {
+                    'X-Frappe-CSRF-Token': window.csrf_token || (window.frappe && frappe.csrf_token) || '',
+                    'bypass-tunnel-reminder': 'true'
+                },
+                body: formData
+            })
+            .then(res => {
+                logDebug("HTTP Resposta Status: " + res.status + " " + res.statusText);
+                if (!res.ok) {
+                    return res.text().then(t => {
+                        logDebug("HTTP Conteúdo Erro 400: " + t.substring(0, 150));
+                        throw new Error('HTTP ' + res.status + ': ' + t.substring(0, 100));
+                    });
+                }
+                return res.json();
+            })
+            .then(data => {
+                logDebug("Retorno do Parse SEFAZ recebido.");
+                if (data.message && data.message.status === 'success') {
+                    showStatusText('✅ ' + data.message.message + ' Redirecionando...', 'success');
+                    setTimeout(() => { window.location.href = data.message.redirect_url; }, 1200);
+                } else {
+                    showStatusText('❌ ' + ((data.message && data.message.error) || 'Erro ao processar itens'), 'error');
+                }
+            })
+            .catch(err => {
+                logDebug("Erro no Parse SEFAZ: " + err.message);
+                showStatusText('❌ Erro de comunicação: ' + err.message, 'error');
+            });
+        }
+
+        function processQrUrl(url) {
+            if (isProcessing || !url) return;
+            isProcessing = true;
+
+            logDebug("Iniciando processamento de URL: " + url.substring(0, 60) + "...");
+            showStatusText('⏳ Processando Cupom Fiscal junto à SEFAZ...\n' + url, 'loading');
+
+            const handleSuccess = function(msg) {
+                logDebug("Retorno da API status: " + (msg.status || 'sem status'));
+                if (msg.status === 'success') {
+                    logDebug("Sucesso total! Invoice: " + msg.invoice_name);
+                    showStatusText('✅ Cupom Ingerido com Sucesso! Redirecionando...', 'success');
+                    setTimeout(() => { window.location.href = msg.redirect_url; }, 1200);
+                } else if (msg.status === 'partial_success') {
+                    logDebug("Parcial sucesso. Chave 44: " + msg.chave_44);
+                    lastCreatedInvoice = msg.invoice_name;
+                    document.getElementById('target-invoice-name').value = msg.invoice_name;
+
+                    const html = `
+                        <strong>⚠️ SEFAZ Bloqueou o Link Direto do QR Code</strong>
+                        <p style="margin: 6px 0; font-size: 0.85rem;">Fatura Rascunho <b>${msg.invoice_name}</b> criada por Chave!</p>
+                        <div class="chave-box">${msg.chave_44}</div>
+                        <div class="action-row">
+                            <button class="btn-success" onclick="copyChaveAndOpen('${msg.chave_44}', '${msg.sefaz_lookup_url}');">
+                                🔍 Copiar Chave & Abrir Portal SEFAZ
+                            </button>
+                            <button class="btn-outline" onclick="window.location.href='${msg.redirect_url}';">
+                                📄 Abrir Fatura Rascunho no Desk
+                            </button>
+                        </div>
+                    `;
+                    showStatusHtml(html, 'warning');
+                    isProcessing = false;
+                } else {
+                    logDebug("Erro retornado: " + (msg.error || JSON.stringify(msg)));
+                    showStatusText('❌ ' + (msg.error || 'Erro ao processar QR Code'), 'error');
+                    setTimeout(() => { isProcessing = false; }, 4000);
+                }
+            };
+
+            const endpoint = '/api/method/nfe_nfce_erpnext.api.parse_qr?qr_url=' + encodeURIComponent(url);
+            logDebug("Chamando Endpoint GET: " + endpoint.substring(0, 70) + "...");
+
+            fetch(endpoint, {
+                method: 'GET',
+                headers: {
+                    'bypass-tunnel-reminder': 'true',
+                    'X-Frappe-CSRF-Token': window.csrf_token || (window.frappe && frappe.csrf_token) || ''
+                }
+            })
+            .then(res => {
+                logDebug("HTTP Resposta Status: " + res.status + " " + res.statusText);
+                if (!res.ok) {
+                    return res.text().then(text => {
+                        logDebug("HTTP Conteúdo do erro: " + text.substring(0, 150));
+                        throw new Error('HTTP ' + res.status + ': ' + text.substring(0, 100));
+                    });
+                }
+                return res.json();
+            })
+            .then(data => {
+                logDebug("JSON recebido com sucesso.");
+                if (data.message) handleSuccess(data.message);
+                else {
+                    logDebug("Payload JSON sem message: " + JSON.stringify(data).substring(0, 120));
+                    showStatusText('❌ ' + (data.exception || data._server_messages || 'Erro de resposta do servidor'), 'error');
+                }
+            })
+            .catch(err => {
+                logDebug("Exceção no Fetch: " + err.message);
+                showStatusText('❌ Falha de comunicação: ' + err.message, 'error');
+                setTimeout(() => { isProcessing = false; }, 4000);
+            });
+        }
+
+        let lastScannedUrl = "";
+        let lastScanTime = 0;
+
+        function onScanSuccess(decodedText, decodedResult) {
+            const now = Date.now();
+            if (decodedText === lastScannedUrl && (now - lastScanTime) < 10000) {
+                logDebug("Ignorando leitura duplicada do mesmo QR Code (<10s).");
+                return;
+            }
+            lastScannedUrl = decodedText;
+            lastScanTime = now;
+
+            logDebug("QR Code Lido pela câmera!");
+            processQrUrl(decodedText);
+        }
+
+        function submitManualUrl() {
+            const input = document.getElementById('manual-url');
+            if (input.value) {
+                logDebug("Submetendo URL do campo manual.");
+                processQrUrl(input.value.trim());
+            }
+        }
+
+        const html5QrcodeScanner = new Html5QrcodeScanner("reader", {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            rememberLastUsedCamera: true
+        }, false);
+        
+        html5QrcodeScanner.render(onScanSuccess);
+    </script>
+</body>
+</html>
