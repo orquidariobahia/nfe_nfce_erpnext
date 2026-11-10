@@ -1,6 +1,6 @@
 {
   "name": "nfe_nfce_erpnext",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Library for handling \"Nota Fiscal\" for brazillian tax compliance.",
   "author": "Shirkit",
   "devDependencies": {
